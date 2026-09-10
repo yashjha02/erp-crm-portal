@@ -2,6 +2,7 @@ import { Request, Response } from "express";
 import { z } from "zod";
 import { prisma } from "../lib/prisma";
 import { asyncHandler, ApiError } from "../utils/asyncHandler";
+import { Prisma } from "@prisma/client";
 
 export const challanItemSchema = z.object({
   productId: z.string().uuid(),
@@ -82,7 +83,6 @@ export const getChallan = asyncHandler(async (req: Request, res: Response) => {
 // available stock so it can never go negative.
 export const createChallan = asyncHandler(async (req: Request, res: Response) => {
   const data = req.body as z.infer<typeof createChallanSchema>;
-
   const result = await prisma.$transaction(async (tx: any) => {
     const customer = await tx.customer.findUnique({ where: { id: data.customerId } });
     if (!customer) throw new ApiError(404, "Customer not found");
@@ -94,7 +94,10 @@ export const createChallan = asyncHandler(async (req: Request, res: Response) =>
       throw new ApiError(400, "One or more selected products were not found");
     }
 
-    const productMap = new Map(products.map((p: any) => [p.id, p]));
+    // Explicit generic type args here — without them, TS infers this Map
+    // as Map<{}, {}>, which makes every .get() call return `{}` and breaks
+    // property access below (product.name, product.sku, etc).
+    const productMap = new Map<string, any>(products.map((p: any) => [p.id, p]));
 
     // Validate stock availability up-front if confirming immediately.
     if (data.status === "CONFIRMED") {
